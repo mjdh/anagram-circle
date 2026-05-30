@@ -413,10 +413,13 @@
       const raw = wordIn.value.toUpperCase().replace(/[^A-Z]/g, '');
       if (!raw) return;
       answerSlots = new Array(raw.length).fill(null);
-      activeBox   = -1;
       drawCircle(shuffle([...raw]));
       drawBoxes();
-      hint.textContent = `${raw.length} letter${raw.length !== 1 ? 's' : ''}  —  tap a box, then tap a letter (or type)`;
+      // Pre-select the first box (highlight only, no focus) so tapping a
+      // wheel letter works immediately without popping the soft keyboard.
+      activeBox = 0;
+      highlight();
+      hint.textContent = `${raw.length} letter${raw.length !== 1 ? 's' : ''}  —  tap a letter (or tap a box to type)`;
     }
 
     function reshuffle() {
@@ -424,9 +427,10 @@
       // Clear answer and redraw circle in a new random order
       const letters = shuffle(wheelSlots.map(s => s.char));
       answerSlots = new Array(letters.length).fill(null);
-      activeBox   = -1;
       drawCircle(letters);
       drawBoxes();
+      activeBox = 0;
+      highlight();
     }
 
     document.getElementById('btnShow').addEventListener('click', show);
