@@ -1,13 +1,8 @@
-const CACHE = 'anagram-v5';
+const CACHE = 'anagram-v6';
 const FILES = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));
-  // skipWaiting here is temporary — it forces activation past the stuck
-  // v3/v4 state so users get the network-first HTML change below.
-  // Once this version is live it will be removed; the notification banner
-  // handles future SW updates from that point on.
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', e => {

@@ -258,6 +258,26 @@
     }
 
     #btnDismissUpdate:hover { color: #aaa; }
+
+    /* ── keyboard dismiss button (mobile only, shown when keyboard is up) ── */
+
+    #btnDismissKb {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #2a2050;
+      border: none;
+      border-top: 1px solid #5a4aaa;
+      color: #bbb;
+      padding: 14px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      z-index: 200;
+      touch-action: manipulation;
+    }
+
+    #btnDismissKb[hidden] { display: none; }
   </style>
 </head>
 <body>
@@ -277,6 +297,8 @@
   </div>
   <div id="hint">Enter a word and press Show (or Enter)</div>
 
+  <button id="btnDismissKb" hidden>Dismiss keyboard ↓</button>
+
   <div id="update-banner" hidden>
     <span>Update available</span>
     <button id="btnUpdate">Reload</button>
@@ -288,11 +310,16 @@
          autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
 
   <script>
-    const stage   = document.getElementById('stage');
-    const wordIn  = document.getElementById('wordInput');
-    const hint    = document.getElementById('hint');
-    const boxArea = document.getElementById('answer-boxes');
-    const kbIn    = document.getElementById('kb-capture');
+    const stage    = document.getElementById('stage');
+    const wordIn   = document.getElementById('wordInput');
+    const hint     = document.getElementById('hint');
+    const boxArea  = document.getElementById('answer-boxes');
+    const kbIn     = document.getElementById('kb-capture');
+
+    // True on touch-primary devices (phones, tablets without mouse).
+    // Used to suppress auto-focus of kbIn so the soft keyboard doesn't
+    // pop up when tapping a box or using the on-screen ⌫ button.
+    const isMobile = window.matchMedia('(pointer: coarse)').matches;
 
     let wheelSlots  = [];  // [{char, el, used}]
     let answerSlots = [];  // [wheelSlotIndex | null]
@@ -362,7 +389,7 @@
       if (i < 0 || i >= answerSlots.length) { activeBox = -1; highlight(); return; }
       activeBox = i;
       highlight();
-      kbIn.focus();
+      if (!isMobile) kbIn.focus();
     }
 
     function highlight() {
@@ -423,7 +450,7 @@
         selectBox(activeBox - 1);
         clearBox(activeBox);
       }
-      kbIn.focus();
+      if (!isMobile) kbIn.focus();
     }
 
     function advance() {
@@ -491,6 +518,24 @@
     document.getElementById('btnShow').addEventListener('click', show);
     document.getElementById('btnShuffle').addEventListener('click', reshuffle);
     wordIn.addEventListener('keydown', e => { if (e.key === 'Enter') show(); });
+
+    // ── keyboard dismiss button ───────────────────────────────────────────────
+    // Shown whenever the visual viewport shrinks (keyboard appeared).
+    // Hidden again when the keyboard closes or the user taps the button.
+
+    const btnDismissKb = document.getElementById('btnDismissKb');
+
+    if (isMobile && window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        const keyboardUp = window.visualViewport.height < window.screen.height * 0.75;
+        btnDismissKb.hidden = !keyboardUp;
+      });
+    }
+
+    btnDismissKb.addEventListener('click', () => {
+      kbIn.blur();
+      btnDismissKb.hidden = true;
+    });
 
     // On-screen delete button — prevent focus steal so the soft keyboard stays
     // up, and works regardless of soft-keyboard 'Backspace' keydown quirks.
