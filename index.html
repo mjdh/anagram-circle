@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self'; manifest-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Anagram Circle</title>
 
   <link rel="manifest" href="manifest.json">
@@ -132,6 +134,18 @@
       justify-content: center;
     }
 
+    #btnDelete {
+      display: block;
+      margin: 16px auto 0;
+      background: #2e2e4a;
+      color: #ccc;
+      font-size: 1.3rem;
+      line-height: 1;
+      padding: 10px 22px;
+    }
+
+    #btnDelete:hover { background: #3e3e60; }
+
     .answer-box {
       position: relative;
       flex: 1;
@@ -208,7 +222,10 @@
   </div>
 
   <div id="stage"></div>
-  <div id="answer-area"><div id="answer-boxes"></div></div>
+  <div id="answer-area">
+    <div id="answer-boxes"></div>
+    <button id="btnDelete" type="button" aria-label="Delete letter" title="Delete letter">⌫</button>
+  </div>
   <div id="hint">Enter a word and press Show (or Enter)</div>
 
   <!-- Invisible input that captures the keyboard when an answer box is selected -->
@@ -341,6 +358,19 @@
       box.classList.add('empty');
     }
 
+    function backspace() {
+      if (activeBox < 0) return;
+      if (answerSlots[activeBox] !== null) {
+        // Box has a letter — clear it, stay put
+        clearBox(activeBox);
+      } else if (activeBox > 0) {
+        // Box already empty — step left and clear that one
+        selectBox(activeBox - 1);
+        clearBox(activeBox);
+      }
+      kbIn.focus();
+    }
+
     function advance() {
       // Next empty box to the right, then wrap from start
       for (let i = activeBox + 1; i < answerSlots.length; i++) {
@@ -359,12 +389,7 @@
       if (activeBox < 0) return;
 
       if (e.key === 'Backspace') {
-        if (answerSlots[activeBox] !== null) {
-          clearBox(activeBox);
-        } else if (activeBox > 0) {
-          selectBox(activeBox - 1);
-          clearBox(activeBox);
-        }
+        backspace();
         e.preventDefault(); return;
       }
       if (e.key === 'ArrowLeft')  { if (activeBox > 0) selectBox(activeBox - 1); e.preventDefault(); return; }
@@ -384,7 +409,8 @@
     // ── show / reshuffle ──────────────────────────────────────────────────────
 
     function show() {
-      const raw = wordIn.value.replace(/\s/g, '').toUpperCase();
+      // Keep only Latin letters A–Z; drop spaces, digits, punctuation, accents
+      const raw = wordIn.value.toUpperCase().replace(/[^A-Z]/g, '');
       if (!raw) return;
       answerSlots = new Array(raw.length).fill(null);
       activeBox   = -1;
@@ -406,6 +432,14 @@
     document.getElementById('btnShow').addEventListener('click', show);
     document.getElementById('btnShuffle').addEventListener('click', reshuffle);
     wordIn.addEventListener('keydown', e => { if (e.key === 'Enter') show(); });
+
+    // On-screen delete button — prevent focus steal so the soft keyboard stays
+    // up, and works regardless of soft-keyboard 'Backspace' keydown quirks.
+    const btnDel = document.getElementById('btnDelete');
+    btnDel.addEventListener('mousedown',  e => e.preventDefault());
+    btnDel.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+    btnDel.addEventListener('click',      backspace);
+    btnDel.addEventListener('touchend',   e => { e.preventDefault(); backspace(); });
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js');
