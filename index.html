@@ -209,6 +209,51 @@
       color: #555;
       font-size: 0.85rem;
     }
+
+    /* ── update banner ───────────────────────────────── */
+
+    #update-banner {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #2a2050;
+      border-top: 1px solid #5a4aaa;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.9rem;
+      color: #ccc;
+      z-index: 100;
+    }
+
+    #update-banner[hidden] { display: none; }
+    #update-banner span    { flex: 1; }
+
+    #btnUpdate {
+      background: #7c6af7;
+      color: #fff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    #btnUpdate:hover { background: #9585f9; }
+
+    #btnDismissUpdate {
+      background: none;
+      border: none;
+      color: #666;
+      cursor: pointer;
+      font-size: 1.2rem;
+      padding: 4px 8px;
+      line-height: 1;
+    }
+
+    #btnDismissUpdate:hover { color: #aaa; }
   </style>
 </head>
 <body>
@@ -227,6 +272,12 @@
     <button id="btnDelete" type="button" aria-label="Delete letter" title="Delete letter">⌫</button>
   </div>
   <div id="hint">Enter a word and press Show (or Enter)</div>
+
+  <div id="update-banner" hidden>
+    <span>Update available</span>
+    <button id="btnUpdate">Reload</button>
+    <button id="btnDismissUpdate" aria-label="Dismiss">✕</button>
+  </div>
 
   <!-- Invisible input that captures the keyboard when an answer box is selected -->
   <input id="kb-capture" type="text" inputmode="text"
@@ -446,7 +497,39 @@
     btnDel.addEventListener('touchend',   e => { e.preventDefault(); backspace(); });
 
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js');
+      navigator.serviceWorker.register('./sw.js').then(reg => {
+        const banner   = document.getElementById('update-banner');
+        const btnUp    = document.getElementById('btnUpdate');
+        const btnDis   = document.getElementById('btnDismissUpdate');
+
+        function offerUpdate() { banner.hidden = false; }
+
+        // New SW already waiting when the page loaded (e.g. tab was left open)
+        if (reg.waiting) offerUpdate();
+
+        // New SW found and installing
+        reg.addEventListener('updatefound', () => {
+          const next = reg.installing;
+          next.addEventListener('statechange', () => {
+            // 'installed' + an existing controller means the new SW is waiting
+            if (next.state === 'installed' && navigator.serviceWorker.controller) {
+              offerUpdate();
+            }
+          });
+        });
+
+        // When the new SW takes control, reload to serve fresh files
+        let reloading = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!reloading) { reloading = true; location.reload(); }
+        });
+
+        btnUp.addEventListener('click', () => {
+          if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
+        });
+
+        btnDis.addEventListener('click', () => { banner.hidden = true; });
+      });
     }
   </script>
 </body>
