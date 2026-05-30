@@ -25,14 +25,14 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 40px 20px;
+      padding: clamp(12px, 2.5vh, 40px) 20px;
     }
 
     h1 {
       font-size: 1.2rem;
       font-weight: 400;
       color: #aaa;
-      margin-bottom: 32px;
+      margin-bottom: clamp(12px, 2vh, 32px);
       letter-spacing: 0.1em;
       text-transform: uppercase;
     }
@@ -41,7 +41,7 @@
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      margin-bottom: 48px;
+      margin-bottom: clamp(12px, 3vh, 48px);
       width: min(420px, 90vw);
     }
 
@@ -81,8 +81,8 @@
 
     #stage {
       position: relative;
-      width: min(420px, 90vw);
-      height: min(420px, 90vw);
+      width: min(420px, 90vw, calc(100vh - 280px));
+      height: min(420px, 90vw, calc(100vh - 280px));
     }
 
     .letter {
@@ -128,8 +128,8 @@
     /* ── answer boxes ────────────────────────────────── */
 
     #answer-area {
-      margin-top: 28px;
-      width: min(420px, 90vw);
+      margin-top: clamp(10px, 2vh, 28px);
+      width: min(420px, 90vw, calc(100vh - 280px));
     }
 
     #answer-boxes {
@@ -140,7 +140,7 @@
 
     #btnDelete {
       display: block;
-      margin: 16px auto 0;
+      margin: clamp(8px, 1.5vh, 16px) auto 0;
       background: #2e2e4a;
       color: #ccc;
       font-size: 1.3rem;
@@ -209,7 +209,7 @@
     }
 
     #hint {
-      margin-top: 24px;
+      margin-top: clamp(8px, 1.5vh, 24px);
       color: #555;
       font-size: 0.85rem;
     }
