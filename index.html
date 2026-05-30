@@ -501,6 +501,7 @@
       // wheel letter works immediately without popping the soft keyboard.
       activeBox = 0;
       highlight();
+      if (!isMobile) kbIn.focus();
       hint.textContent = `${raw.length} letter${raw.length !== 1 ? 's' : ''}  —  tap a letter (or tap a box to type)`;
     }
 
@@ -513,6 +514,7 @@
       drawBoxes();
       activeBox = 0;
       highlight();
+      if (!isMobile) kbIn.focus();
     }
 
     document.getElementById('btnShow').addEventListener('click', show);
