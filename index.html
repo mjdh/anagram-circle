@@ -341,33 +341,39 @@
     // ── draw circle ──────────────────────────────────────────────────────────
 
     function drawCircle(letters) {
-      stage.innerHTML = '';
-      wheelSlots = [];
-
-      const cx     = stage.offsetWidth  / 2;
-      const cy     = stage.offsetHeight / 2;
-      const n      = letters.length;
-      const radius = Math.min(cx - 40, Math.max(80, 160 - n * 2));
-      const start  = Math.random() * 2 * Math.PI;
-
-      letters.forEach((ch, i) => {
-        const angle = start + (2 * Math.PI * i) / n;
+      // Build fresh slot objects with new elements, then position them.
+      const slots = letters.map(ch => {
         const el = document.createElement('div');
         el.className = 'letter';
         el.textContent = ch;
-        el.style.left = (cx + radius * Math.cos(angle)) + 'px';
-        el.style.top  = (cy + radius * Math.sin(angle)) + 'px';
-
-        wheelSlots.push({ char: ch, el, used: false });
-
-        // Prevent focus steal on touch/mouse so the kb-capture stays focused
+        const slot = { char: ch, el, used: false };
         el.addEventListener('mousedown',  e => e.preventDefault());
         el.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
-        // Desktop: click; mobile: touchend (touchstart prevention blocks synthetic click)
-        el.addEventListener('click',    () => tapWheel(i));
-        el.addEventListener('touchend', e => { e.preventDefault(); tapWheel(i); });
+        // Look up current index at call time so reshuffles don't break the mapping.
+        el.addEventListener('click',    () => tapWheel(wheelSlots.indexOf(slot)));
+        el.addEventListener('touchend', e => { e.preventDefault(); tapWheel(wheelSlots.indexOf(slot)); });
+        return slot;
+      });
+      placeSlots(slots);
+    }
 
-        stage.appendChild(el);
+    function placeSlots(slots) {
+      // Detach children without destroying them — event listeners and .used
+      // state on slot objects survive, which is what reshuffle relies on.
+      while (stage.firstChild) stage.removeChild(stage.firstChild);
+      wheelSlots = slots;
+
+      const cx     = stage.offsetWidth  / 2;
+      const cy     = stage.offsetHeight / 2;
+      const n      = slots.length;
+      const radius = Math.min(cx - 40, Math.max(80, 160 - n * 2));
+      const start  = Math.random() * 2 * Math.PI;
+
+      slots.forEach((slot, i) => {
+        const angle = start + (2 * Math.PI * i) / n;
+        slot.el.style.left = (cx + radius * Math.cos(angle)) + 'px';
+        slot.el.style.top  = (cy + radius * Math.sin(angle)) + 'px';
+        stage.appendChild(slot.el);
       });
     }
 
@@ -507,12 +513,12 @@
 
     function reshuffle() {
       if (!wheelSlots.length) return;
-      // Clear answer and redraw circle in a new random order
-      const letters = shuffle(wheelSlots.map(s => s.char));
-      answerSlots = new Array(letters.length).fill(null);
-      drawCircle(letters);
-      drawBoxes();
-      activeBox = 0;
+      // Remember which slot object is assigned to each answer box.
+      const savedRefs = answerSlots.map(wi => wi !== null ? wheelSlots[wi] : null);
+      // Rearrange slot positions — objects, .used state, and box content stay intact.
+      placeSlots(shuffle([...wheelSlots]));
+      // Rebuild answerSlots indices to match the new array order.
+      answerSlots = savedRefs.map(ref => ref !== null ? wheelSlots.indexOf(ref) : null);
       highlight();
       if (!isMobile) kbIn.focus();
     }
