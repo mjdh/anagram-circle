@@ -41,7 +41,7 @@
       margin-bottom: 48px;
     }
 
-    input[type="text"] {
+    input[type="text"]:not(#kb-capture) {
       padding: 12px 18px;
       font-size: 1.2rem;
       border: 2px solid #444;
@@ -53,7 +53,7 @@
       letter-spacing: 0.05em;
     }
 
-    input[type="text"]:focus {
+    input[type="text"]:not(#kb-capture):focus {
       border-color: #7c6af7;
     }
 
@@ -68,24 +68,15 @@
 
     button:active { transform: scale(0.96); }
 
-    #btnShow {
-      background: #7c6af7;
-      color: #fff;
-    }
-
+    #btnShow    { background: #7c6af7; color: #fff; }
     #btnShow:hover { background: #9585f9; }
-
-    #btnShuffle {
-      background: #2e2e4a;
-      color: #ccc;
-    }
-
+    #btnShuffle { background: #2e2e4a; color: #ccc; }
     #btnShuffle:hover { background: #3e3e60; }
 
     #stage {
       position: relative;
-      width: 420px;
-      height: 420px;
+      width: min(420px, 90vw);
+      height: min(420px, 90vw);
     }
 
     .letter {
@@ -103,12 +94,103 @@
       background: #2a2050;
       border: 2px solid #5a4aaa;
       transform: translate(-50%, -50%);
-      transition: opacity 0.3s;
       user-select: none;
+      cursor: pointer;
+      overflow: hidden;
+      transition: opacity 0.2s;
+    }
+
+    .letter.used {
+      opacity: 0.42;
+    }
+
+    /* diagonal strikethrough via gradient on the pseudo-element */
+    .letter.used::after {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      background: linear-gradient(
+        135deg,
+        transparent calc(50% - 1.5px),
+        #b8a8ff calc(50% - 1.5px),
+        #b8a8ff calc(50% + 1.5px),
+        transparent calc(50% + 1.5px)
+      );
+      pointer-events: none;
+    }
+
+    /* ── answer boxes ────────────────────────────────── */
+
+    #answer-area {
+      margin-top: 28px;
+      width: min(420px, 90vw);
+    }
+
+    #answer-boxes {
+      display: flex;
+      gap: 4px;
+      justify-content: center;
+    }
+
+    .answer-box {
+      position: relative;
+      flex: 1;
+      max-width: 44px;
+      min-width: 18px;
+      height: 52px;
+      border-bottom: 2px solid #3a3a5a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(0.9rem, 4vw, 1.5rem);
+      font-weight: 700;
+      color: #f0e6ff;
+      text-transform: uppercase;
+      cursor: pointer;
+      user-select: none;
+      transition: border-color 0.12s, background 0.12s;
+    }
+
+    .answer-box.active {
+      border-bottom-color: #7c6af7;
+      background: rgba(124, 106, 247, 0.1);
+    }
+
+    /* blinking caret shown on the active empty box */
+    .answer-box.active.empty::after {
+      content: '';
+      position: absolute;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 2px;
+      height: 1.3em;
+      background: #7c6af7;
+      animation: caret 1s step-end infinite;
+    }
+
+    @keyframes caret {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
+    }
+
+    /* ── hidden keyboard capture input ───────────────── */
+
+    #kb-capture {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      font-size: 16px; /* prevents iOS zoom on focus */
+      border: none;
+      padding: 0;
+      pointer-events: none;
     }
 
     #hint {
-      margin-top: 20px;
+      margin-top: 24px;
       color: #555;
       font-size: 0.85rem;
     }
@@ -125,13 +207,25 @@
   </div>
 
   <div id="stage"></div>
+  <div id="answer-area"><div id="answer-boxes"></div></div>
   <div id="hint">Enter a word and press Show (or Enter)</div>
 
+  <!-- Invisible input that captures the keyboard when an answer box is selected -->
+  <input id="kb-capture" type="text" inputmode="text"
+         autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
+
   <script>
-    const stage = document.getElementById('stage');
-    const input = document.getElementById('wordInput');
-    const hint  = document.getElementById('hint');
-    let currentLetters = [];
+    const stage   = document.getElementById('stage');
+    const wordIn  = document.getElementById('wordInput');
+    const hint    = document.getElementById('hint');
+    const boxArea = document.getElementById('answer-boxes');
+    const kbIn    = document.getElementById('kb-capture');
+
+    let wheelSlots  = [];  // [{char, el, used}]
+    let answerSlots = [];  // [wheelSlotIndex | null]
+    let activeBox   = -1;
+
+    // ── utilities ────────────────────────────────────────────────────────────
 
     function shuffle(arr) {
       const a = [...arr];
@@ -142,48 +236,169 @@
       return a;
     }
 
-    function draw(letters) {
+    function getBoxEls() { return document.querySelectorAll('.answer-box'); }
+
+    // ── draw circle ──────────────────────────────────────────────────────────
+
+    function drawCircle(letters) {
       stage.innerHTML = '';
-      if (!letters.length) return;
+      wheelSlots = [];
 
-      const cx = stage.offsetWidth  / 2;
-      const cy = stage.offsetHeight / 2;
-      const n  = letters.length;
-
+      const cx     = stage.offsetWidth  / 2;
+      const cy     = stage.offsetHeight / 2;
+      const n      = letters.length;
       const radius = Math.min(cx - 40, Math.max(80, 160 - n * 2));
-      const startAngle = Math.random() * 2 * Math.PI;
+      const start  = Math.random() * 2 * Math.PI;
 
       letters.forEach((ch, i) => {
-        const angle = startAngle + (2 * Math.PI * i) / n;
-        const x = cx + radius * Math.cos(angle);
-        const y = cy + radius * Math.sin(angle);
-
+        const angle = start + (2 * Math.PI * i) / n;
         const el = document.createElement('div');
         el.className = 'letter';
         el.textContent = ch;
-        el.style.left = x + 'px';
-        el.style.top  = y + 'px';
+        el.style.left = (cx + radius * Math.cos(angle)) + 'px';
+        el.style.top  = (cy + radius * Math.sin(angle)) + 'px';
+
+        wheelSlots.push({ char: ch, el, used: false });
+
+        // Prevent focus steal on touch/mouse so the kb-capture stays focused
+        el.addEventListener('mousedown',  e => e.preventDefault());
+        el.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+        // Desktop: click; mobile: touchend (touchstart prevention blocks synthetic click)
+        el.addEventListener('click',    () => tapWheel(i));
+        el.addEventListener('touchend', e => { e.preventDefault(); tapWheel(i); });
+
         stage.appendChild(el);
       });
     }
 
+    // ── draw answer boxes ────────────────────────────────────────────────────
+
+    function drawBoxes() {
+      boxArea.innerHTML = '';
+      answerSlots.forEach((_, i) => {
+        const box = document.createElement('div');
+        box.className = 'answer-box empty';
+        box.addEventListener('pointerdown', () => selectBox(i));
+        boxArea.appendChild(box);
+      });
+    }
+
+    // ── box selection ────────────────────────────────────────────────────────
+
+    function selectBox(i) {
+      if (i < 0 || i >= answerSlots.length) { activeBox = -1; highlight(); return; }
+      activeBox = i;
+      highlight();
+      kbIn.focus();
+    }
+
+    function highlight() {
+      getBoxEls().forEach((b, j) => b.classList.toggle('active', j === activeBox));
+    }
+
+    // ── fill / clear ─────────────────────────────────────────────────────────
+
+    function tapWheel(wi) {
+      if (activeBox < 0 || answerSlots[activeBox] !== null) return;
+      if (wheelSlots[wi].used) return;
+      commit(activeBox, wi);
+      advance();
+    }
+
+    function typeChar(ch) {
+      if (activeBox < 0 || answerSlots[activeBox] !== null) return;
+      const wi = wheelSlots.findIndex(s => s.char === ch && !s.used);
+      if (wi === -1) return;
+      commit(activeBox, wi);
+      advance();
+    }
+
+    function commit(bi, wi) {
+      answerSlots[bi] = wi;
+      wheelSlots[wi].used = true;
+      wheelSlots[wi].el.classList.add('used');
+      const box = getBoxEls()[bi];
+      box.textContent = wheelSlots[wi].char;
+      box.classList.remove('empty');
+    }
+
+    function clearBox(bi) {
+      if (answerSlots[bi] === null) return;
+      const wi = answerSlots[bi];
+      answerSlots[bi] = null;
+      wheelSlots[wi].used = false;
+      wheelSlots[wi].el.classList.remove('used');
+      const box = getBoxEls()[bi];
+      box.textContent = '';
+      box.classList.add('empty');
+    }
+
+    function advance() {
+      // Next empty box to the right, then wrap from start
+      for (let i = activeBox + 1; i < answerSlots.length; i++) {
+        if (answerSlots[i] === null) { selectBox(i); return; }
+      }
+      for (let i = 0; i < answerSlots.length; i++) {
+        if (answerSlots[i] === null) { selectBox(i); return; }
+      }
+      // All filled — deselect
+      activeBox = -1;
+      highlight();
+    }
+
+    // ── keyboard capture ─────────────────────────────────────────────────────
+
+    kbIn.addEventListener('keydown', e => {
+      if (activeBox < 0) return;
+
+      if (e.key === 'Backspace') {
+        if (answerSlots[activeBox] !== null) {
+          clearBox(activeBox);
+        } else if (activeBox > 0) {
+          selectBox(activeBox - 1);
+          clearBox(activeBox);
+        }
+        e.preventDefault(); return;
+      }
+      if (e.key === 'ArrowLeft')  { if (activeBox > 0) selectBox(activeBox - 1); e.preventDefault(); return; }
+      if (e.key === 'ArrowRight') { if (activeBox < answerSlots.length - 1) selectBox(activeBox + 1); e.preventDefault(); return; }
+      if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
+        typeChar(e.key.toUpperCase()); e.preventDefault();
+      }
+    });
+
+    // Handles mobile soft keyboard (fires 'input' instead of reliable 'keydown')
+    kbIn.addEventListener('input', () => {
+      const v = kbIn.value.toUpperCase();
+      kbIn.value = '';
+      if (v && /[A-Z]/.test(v[0])) typeChar(v[0]);
+    });
+
+    // ── show / reshuffle ──────────────────────────────────────────────────────
+
     function show() {
-      const raw = input.value.replace(/\s/g, '');
+      const raw = wordIn.value.replace(/\s/g, '').toUpperCase();
       if (!raw) return;
-      currentLetters = shuffle([...raw]);
-      draw(currentLetters);
-      hint.textContent = `${raw.length} letter${raw.length !== 1 ? 's' : ''}  —  press Reshuffle to rearrange`;
+      answerSlots = new Array(raw.length).fill(null);
+      activeBox   = -1;
+      drawCircle(shuffle([...raw]));
+      drawBoxes();
+      hint.textContent = `${raw.length} letter${raw.length !== 1 ? 's' : ''}  —  tap a box, then tap a letter (or type)`;
     }
 
     function reshuffle() {
-      if (!currentLetters.length) return;
-      currentLetters = shuffle(currentLetters);
-      draw(currentLetters);
+      if (!wheelSlots.length) return;
+      // Clear answer and redraw circle in a new random order
+      const letters = shuffle(wheelSlots.map(s => s.char));
+      answerSlots = new Array(letters.length).fill(null);
+      activeBox   = -1;
+      drawCircle(letters);
+      drawBoxes();
     }
 
     document.getElementById('btnShow').addEventListener('click', show);
     document.getElementById('btnShuffle').addEventListener('click', reshuffle);
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') show(); });
+    wordIn.addEventListener('keydown', e => { if (e.key === 'Enter') show(); });
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js');
